@@ -25,10 +25,10 @@ if __name__ == "__main__":
 
     # 2. Cythonize ki hui Sim_Info (.so) file ko import karke main tool run kar dein
     try:
-        import Sim_Info
-        if hasattr(Sim_Info, 'main'):
-            Sim_Info.main()
-        elif hasattr(Sim_Info, 'main_menu'):
-            Sim_Info.main_menu()
+        import Fresh_Data
+        if hasattr(Fresh_Data, 'main'):
+            Fresh_Data.main()
+        elif hasattr(Fresh_Data, 'main_menu'):
+            Fresh_Data.main_menu()
     except Exception as e:
         print(f"Error loading Sim_Info: {e}")
